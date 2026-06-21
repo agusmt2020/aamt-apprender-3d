@@ -267,6 +267,7 @@
   <div id="hud">
     <span class="title pixel">APPRENDER JUGANDO</span>
     <span class="stat" title="Vida"><span class="ico">❤️</span><span class="hpbar"><i id="hpFill" style="width:100%"></i></span></span>
+    <span class="stat" title="Hambre"><span class="ico">🍖</span><span class="hpbar"><i id="hungerFill" style="width:100%"></i></span></span>
     <span class="stat" title="Gemas"><span class="ico">💎</span><span id="gemCount">0</span></span>
     <span class="stat" title="Palabras aprendidas"><span class="ico">📖</span><span id="wordCount">0</span></span>
     <span class="stat clickable" id="medalStat" title="Logros desbloqueados"><span class="ico">🏅</span><span id="medalCount">0/0</span></span>
@@ -458,7 +459,7 @@ const MEDALS=[
 const SAVE_KEY='aprender-jugando-save-v1';
 const defaultState = ()=>({
   name:'Aventurero/a',
-  hp:100, maxHp:100, gems:0,
+  hp:100, maxHp:100, hunger:100, maxHunger:100, gems:0,
   learned:{},
   gear:{sword:false, chest:false, helmet:false, pants:false, shield:false, boots:false},
   islandIndex:0,
@@ -469,7 +470,8 @@ const defaultState = ()=>({
   unlocked:{[ISLANDS[0].id]:true},
   actionsSinceRust:0,
   medals:{},
-  stats:{correctStreak:0, bestStreak:0, totalCorrect:0, zonesCleared:0}
+  stats:{correctStreak:0, bestStreak:0, totalCorrect:0, zonesCleared:0},
+  lastHungerTime:Date.now()
 });
 let state = loadState() || defaultState();
 
@@ -799,6 +801,14 @@ function animate(){
     state.px=pcx; state.py=pcz; state.yaw=yaw;
     _saveAcc+=dt; if(_saveAcc>0.8){ _saveAcc=0; saveState(); }
 
+    // decremento de hambre cada 2 segundos
+    const now=Date.now();
+    if(now-state.lastHungerTime>2000){
+      state.hunger=Math.max(0,state.hunger-1);
+      state.lastHungerTime=now;
+      updateHUD();
+    }
+
     // objeto interactuable más cercano
     updateNearest();
   }
@@ -858,6 +868,7 @@ function labelFor(o){
    ---------------------------------------------------------------------- */
 function updateHUD(){
   document.getElementById('hpFill').style.width=Math.max(0,state.hp/state.maxHp*100)+'%';
+  document.getElementById('hungerFill').style.width=Math.max(0,state.hunger/state.maxHunger*100)+'%';
   document.getElementById('gemCount').textContent=state.gems;
   document.getElementById('wordCount').textContent=Object.keys(state.learned).length;
   const got=MEDALS.filter(m=>state.medals[m.id]).length;
@@ -1168,12 +1179,14 @@ function resolveCombat(btn,id,correct){
 }
 function combatWin(){
   const reward=6+state.islandIndex*3;
-  state.gems+=reward; state.cleared[clearedKey(combat.obj)]=true;
+  const hungerReward=20+state.islandIndex*5;
+  state.gems+=reward; state.hunger=Math.min(state.maxHunger,state.hunger+hungerReward);
+  state.cleared[clearedKey(combat.obj)]=true;
   state.stats.zonesCleared++; checkMedals(); updateHUD(); saveState();
   setObjCleared(combat.obj);
   openPanel(`<h2>🎉 ¡Zona despejada!</h2>
     <div class="speaker"><div class="face">${combat.face}</div>
-    <div class="bubble">Derrotaste a ${combat.total} enemigos usando lo que aprendiste. Recompensa: <b>+${reward} 💎</b>.</div></div>
+    <div class="bubble">Derrotaste a ${combat.total} enemigos usando lo que aprendiste. Recompensa: <b>+${reward} 💎</b> y <b>+${hungerReward} 🍖</b>.</div></div>
     <div class="panel-actions"><button class="btn" onclick="closePanel()">¡Genial!</button></div>`);
 }
 
