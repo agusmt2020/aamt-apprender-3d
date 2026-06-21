@@ -366,6 +366,8 @@ const ISLANDS = [
       {id:'reviewer', kind:'reviewer', face:'🧒', x:10, y:12, name:'Niña Lía'},
       {id:'shop',     kind:'shop',     face:'🏪', x:3, y:6, name:'Tienda del Herrero'},
       {id:'enemies',  kind:'enemies',  face:'👾', x:15, y:5, name:'Nido de slimes'},
+      {id:'pig',      kind:'animals',  face:'🐷', x:8, y:8, name:'Cerdo Chanchito'},
+      {id:'cow',      kind:'animals',  face:'🐄', x:12, y:7, name:'Vaca Bessie'},
       {id:'boss',     kind:'boss',     face:'👹', x:10, y:1, name:'Guardián de la Niebla', face2:'🏳️',
        greeting:'Para cruzar a la siguiente isla debes vencerme. ¡Solo lo lograrás si llevas una espada y has aprendido suficientes palabras!'}
     ]
@@ -410,6 +412,8 @@ const ISLANDS = [
       {id:'reviewer', kind:'reviewer', face:'🦉', x:3, y:11, name:'Búho Memo'},
       {id:'shop',     kind:'shop',     face:'⛺', x:3, y:3, name:'Campamento del Herrero'},
       {id:'enemies',  kind:'enemies',  face:'🐗', x:14, y:4, name:'Manada de jabalíes'},
+      {id:'deer',     kind:'animals',  face:'🦌', x:6, y:5, name:'Ciervo Don Ramón'},
+      {id:'rabbit',   kind:'animals',  face:'🐰', x:11, y:9, name:'Conejo Saltarín'},
       {id:'boss',     kind:'boss',     face:'🐲', x:10, y:1, name:'Dragón del Bosque', face2:'🏳️',
        greeting:'¡Solo el conocimiento me hiere! Trae tu espada y muchas palabras si quieres pasar.'}
     ]
@@ -970,6 +974,7 @@ function interact(o){
   else if(o.kind==='reviewer') talkReviewer(o);
   else if(o.kind==='shop') openShop(o);
   else if(o.kind==='enemies') startCombat(o);
+  else if(o.kind==='animals') startAnimalCombat(o);
   else if(o.kind==='boss') state.bossDefeated[island().id]?openTravel():startBoss(o);
 }
 document.getElementById('actionBtn').addEventListener('click',()=>{const o=nearestInteractable(); if(o) interact(o);});
@@ -1188,6 +1193,71 @@ function combatWin(){
     <div class="speaker"><div class="face">${combat.face}</div>
     <div class="bubble">Derrotaste a ${combat.total} enemigos usando lo que aprendiste. Recompensa: <b>+${reward} 💎</b> y <b>+${hungerReward} 🍖</b>.</div></div>
     <div class="panel-actions"><button class="btn" onclick="closePanel()">¡Genial!</button></div>`);
+}
+
+/* ---------- Combate con animales (dan comida) ---------- */
+let animalCombat=null;
+function startAnimalCombat(o){
+  if(isCleared(o)){
+    openPanel(`<h2>✅ ${o.name}</h2>
+      <div class="speaker"><div class="face">${o.face}</div>
+      <div class="bubble">Ya capturaste a este animal. ¡Buen trabajo!</div></div>
+      <div class="panel-actions"><button class="btn" onclick="closePanel()">Cerrar</button></div>`);
+    return;
+  }
+  if(Object.keys(state.learned).length<1){
+    openPanel(`<h2>🎯 ${o.name}</h2>
+      <div class="speaker"><div class="face">${o.face}</div>
+      <div class="bubble">Aprende al menos <b>1 palabra</b> para poder capturar este animal.</div></div>
+      <div class="panel-actions"><button class="btn ghost" onclick="closePanel()">Volver</button></div>`);
+    return;
+  }
+  const level=1;
+  animalCombat={obj:o, total:level, killed:0, face:o.face};
+  animalCombatTurn();
+}
+function animalCombatTurn(){
+  if(animalCombat.killed>=animalCombat.total){ animalCombatWin(); return; }
+  const id=anyLearnedId(), w=byId(id), opts=buildChoices(w.es);
+  openPanel(`<h2>🎯 ${animalCombat.obj.name}</h2>
+    <p style="font-size:12px;opacity:.85;text-align:center;margin-bottom:6px">Para capturar a este animal y conseguir comida, demuestra lo aprendido.</p>
+    <div class="speaker"><div class="face">${animalCombat.face}</div>
+    <div class="bubble">¿Qué significa esta palabra?</div></div>
+    <div class="wordbig">${w.en}</div>
+    <div class="choices">${opts.map(op=>`<button class="choice" data-v="${op}">${op}</button>`).join('')}</div>
+    <div class="feedback" id="fb"></div>`);
+  panel.querySelectorAll('.choice').forEach(btn=>btn.addEventListener('click',()=>resolveAnimalCombat(btn,id,w.es)));
+}
+function resolveAnimalCombat(btn,id,correct){
+  const right=btn.dataset.v===correct;
+  panel.querySelectorAll('.choice').forEach(b=>{b.disabled=true;
+    if(b.dataset.v===correct)b.classList.add('correct'); else if(b===btn)b.classList.add('wrong');});
+  const fb=document.getElementById('fb');
+  if(right){
+    animalCombat.killed++;
+    state.learned[id].mastery=Math.min(3,state.learned[id].mastery+1);
+    recordAnswer(true);
+    fb.className='feedback good'; fb.textContent='¡Atrapado! Animal capturado.';
+  }else{
+    recordAnswer(false);
+    fb.className='feedback bad'; fb.textContent=`Casi. La respuesta era "${correct}".`;
+  }
+  saveState();
+  setTimeout(()=>{
+    if(animalCombat.killed>=animalCombat.total) animalCombatWin();
+    else addAction(`<button class="btn" onclick="animalCombatTurn()">Siguiente</button>`);
+  },650);
+}
+function animalCombatWin(){
+  const hungerReward=35+state.islandIndex*10;
+  state.hunger=Math.min(state.maxHunger,state.hunger+hungerReward);
+  state.cleared[clearedKey(animalCombat.obj)]=true;
+  checkMedals(); updateHUD(); saveState();
+  setObjCleared(animalCombat.obj);
+  openPanel(`<h2>🎉 ¡Animal capturado!</h2>
+    <div class="speaker"><div class="face">${animalCombat.face}</div>
+    <div class="bubble">Capturaste a ${animalCombat.obj.name} y conseguiste deliciosa comida. ¡Tu hambre se llena! <b>+${hungerReward} 🍖</b></div></div>
+    <div class="panel-actions"><button class="btn" onclick="closePanel()">¡Delicioso!</button></div>`);
 }
 
 /* ---------- Jefe: completar 5 palabras con letras faltantes ---------- */
