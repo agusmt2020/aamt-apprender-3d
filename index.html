@@ -490,7 +490,9 @@ function loadState(){
     const saved=JSON.parse(r);
     const base=defaultState();
     return {...base, ...saved, gear:{...base.gear, ...(saved.gear||{})},
-      stats:{...base.stats, ...(saved.stats||{})}, medals:saved.medals||{}};
+      stats:{...base.stats, ...(saved.stats||{})},
+      inventory:{...base.inventory, ...(saved.inventory||{})},
+      medals:saved.medals||{}};
   }catch(e){ return null; }
 }
 function resetGame(){ state = defaultState(); saveState(); buildWorld(); updateHUD(); refreshActionBtn(); closePanel(); toast('Progreso reiniciado'); }
@@ -862,6 +864,12 @@ function refreshActionBtn(){
   if(o){ btn.disabled=false; btn.textContent=labelFor(o);
     ringMesh.visible=true; ringMesh.position.set(o.x,0.12,o.y); }
   else{ btn.disabled=true; btn.textContent='Acércate a alguien'; ringMesh.visible=false; }
+  const waterBtn=document.getElementById('drinkWaterBtn');
+  if(state.inventory.water>0 && state.jet<state.maxJet){
+    waterBtn.disabled=false;
+  }else{
+    waterBtn.disabled=true;
+  }
 }
 function labelFor(o){
   if(o.kind==='teacher') return '💬 Hablar con '+o.name.split(' ').slice(1).join(' ');
@@ -1465,11 +1473,22 @@ function travelTo(idx){
   toast('Llegaste a '+ISLANDS[idx].name);
 }
 
+/* ---------- Consumibles ---------- */
+function drinkWater(){
+  if(state.inventory.water===0){ toast('No tienes agua',true); return; }
+  const recovered=50;
+  state.inventory.water--;
+  state.jet=Math.min(state.maxJet,state.jet+recovered);
+  updateHUD(); saveState(); refreshActionBtn();
+  toast(`¡Bebiste agua! +${recovered} ⚡`);
+}
+
 /* ---------- Banco de palabras ---------- */
 document.getElementById('bankBtn').addEventListener('click',openBank);
 document.getElementById('medalStat').addEventListener('click',openMedals);
 document.getElementById('helpBtn').addEventListener('click',showHelp);
 document.getElementById('profileBtn').addEventListener('click',openProfile);
+document.getElementById('drinkWaterBtn').addEventListener('click',drinkWater);
 
 /* ---------- Perfil del jugador ---------- */
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -1485,13 +1504,18 @@ function openProfile(){
       ${it('shield','🛡️','fi-shield')}
       ${it('sword','🗡️','fi-sword')}
     </div>`;
-  const owned=SHOP.filter(s=>state.gear[s.key]).length;
-  const items=SHOP.map(s=>`<div class="shop-item">
+  const owned=SHOP.filter(s=>s.type==='gear' && state.gear[s.key]).length;
+  const gearItems=SHOP.filter(s=>s.type==='gear').map(s=>`<div class="shop-item">
       <span class="si-ico">${s.ico}</span>
       <div><div class="si-name">${s.name}</div><div class="si-desc">${s.desc}</div></div>
       <div class="si-buy">${state.gear[s.key]
         ?'<span class="owned">✔ Equipado</span>'
         :'<span class="tag lock">Por conseguir</span>'}</div>
+    </div>`).join('');
+  const consumableItems=SHOP.filter(s=>s.type==='consumable').map(s=>`<div class="shop-item">
+      <span class="si-ico">${s.ico}</span>
+      <div><div class="si-name">${s.name}</div><div class="si-desc">${s.desc}</div></div>
+      <div class="si-buy"><span class="owned">x${state.inventory[s.key]||0}</span></div>
     </div>`).join('');
   const got=MEDALS.filter(m=>state.medals[m.id]).length;
   openPanel(`<h2>👤 Perfil</h2>
@@ -1501,12 +1525,13 @@ function openProfile(){
         <div class="prof-name">${escapeHtml(state.name)}</div>
         <div class="prof-stats">💎 ${state.gems} &nbsp; 📖 ${learnedCount()} palabras</div>
         <div class="prof-stats">🏅 ${got}/${MEDALS.length} logros</div>
-        <div class="prof-stats">🛡️ Equipo: ${owned}/${SHOP.length}</div>
+        <div class="prof-stats">🛡️ Equipo: ${owned}/${SHOP.filter(s=>s.type==='gear').length}</div>
         <button class="btn ghost" id="editNameBtn">✏️ Editar nombre</button>
       </div>
     </div>
     <div class="wb-sub">Tu equipo (lo que vistes en la figura)</div>
-    ${items}
+    ${gearItems}
+    ${consumableItems?'<div class="wb-sub">Tu inventario</div>'+consumableItems:''}
     <div class="panel-actions"><button class="btn ghost" onclick="closePanel()">Cerrar</button></div>`);
   const en=panel.querySelector('#editNameBtn'); if(en) en.onclick=editName;
 }
