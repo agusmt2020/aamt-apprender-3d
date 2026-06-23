@@ -268,6 +268,7 @@
     <span class="title pixel">APPRENDER JUGANDO</span>
     <span class="stat" title="Vida"><span class="ico">❤️</span><span class="hpbar"><i id="hpFill" style="width:100%"></i></span></span>
     <span class="stat" title="Hambre"><span class="ico">🍖</span><span class="hpbar"><i id="hungerFill" style="width:100%"></i></span></span>
+    <span class="stat" title="Jet"><span class="ico">⚡</span><span class="hpbar"><i id="jetFill" style="width:100%"></i></span></span>
     <span class="stat" title="Gemas"><span class="ico">💎</span><span id="gemCount">0</span></span>
     <span class="stat" title="Palabras aprendidas"><span class="ico">📖</span><span id="wordCount">0</span></span>
     <span class="stat clickable" id="medalStat" title="Logros desbloqueados"><span class="ico">🏅</span><span id="medalCount">0/0</span></span>
@@ -295,6 +296,7 @@
     </div>
     <div class="ctrl-right">
       <button class="btn gold" id="actionBtn" disabled>Acércate a alguien</button>
+      <button class="btn ghost" id="drinkWaterBtn" disabled>💧 Beber agua</button>
       <button class="btn ghost" id="bankBtn">📖 Mis palabras</button>
       <button class="btn ghost" id="profileBtn">👤 Perfil</button>
       <button class="btn ghost" id="helpBtn">❓ Ayuda</button>
@@ -423,12 +425,13 @@ const ISLANDS = [
 
 /* equipo de la tienda (común a todas las islas) */
 const SHOP=[
-  {key:'sword',  ico:'🗡️', name:'Espada',    desc:'Necesaria para enfrentar al jefe', price:8},
-  {key:'chest',  ico:'🦺', name:'Pechera',   desc:'Reduce mucho el daño (-6)', price:10},
-  {key:'helmet', ico:'🪖', name:'Casco',     desc:'Reduce el daño (-4)', price:6},
-  {key:'pants',  ico:'👖', name:'Pantalones',desc:'Reduce el daño (-3)', price:7},
-  {key:'shield', ico:'🛡️', name:'Escudo',    desc:'Bloquea bastante daño (-5)', price:9},
-  {key:'boots',  ico:'🥾', name:'Botas',     desc:'Reduce un poco el daño (-2)', price:5}
+  {key:'sword',  ico:'🗡️', name:'Espada',    desc:'Necesaria para enfrentar al jefe', price:8, type:'gear'},
+  {key:'chest',  ico:'🦺', name:'Pechera',   desc:'Reduce mucho el daño (-6)', price:10, type:'gear'},
+  {key:'helmet', ico:'🪖', name:'Casco',     desc:'Reduce el daño (-4)', price:6, type:'gear'},
+  {key:'pants',  ico:'👖', name:'Pantalones',desc:'Reduce el daño (-3)', price:7, type:'gear'},
+  {key:'shield', ico:'🛡️', name:'Escudo',    desc:'Bloquea bastante daño (-5)', price:9, type:'gear'},
+  {key:'boots',  ico:'🥾', name:'Botas',     desc:'Reduce un poco el daño (-2)', price:5, type:'gear'},
+  {key:'water',  ico:'💧', name:'Agua',      desc:'Regenera la barra de Jet', price:5, type:'consumable'}
 ];
 
 /* ----------------------------------------------------------------------
@@ -463,9 +466,10 @@ const MEDALS=[
 const SAVE_KEY='aprender-jugando-save-v1';
 const defaultState = ()=>({
   name:'Aventurero/a',
-  hp:100, maxHp:100, hunger:100, maxHunger:100, gems:0,
+  hp:100, maxHp:100, hunger:100, maxHunger:100, jet:100, maxJet:100, gems:0,
   learned:{},
   gear:{sword:false, chest:false, helmet:false, pants:false, shield:false, boots:false},
+  inventory:{water:0},
   islandIndex:0,
   px:ISLANDS[0].spawn.x, py:ISLANDS[0].spawn.y,
   yaw:0,
@@ -873,6 +877,7 @@ function labelFor(o){
 function updateHUD(){
   document.getElementById('hpFill').style.width=Math.max(0,state.hp/state.maxHp*100)+'%';
   document.getElementById('hungerFill').style.width=Math.max(0,state.hunger/state.maxHunger*100)+'%';
+  document.getElementById('jetFill').style.width=Math.max(0,state.jet/state.maxJet*100)+'%';
   document.getElementById('gemCount').textContent=state.gems;
   document.getElementById('wordCount').textContent=Object.keys(state.learned).length;
   const got=MEDALS.filter(m=>state.medals[m.id]).length;
@@ -1073,13 +1078,20 @@ function talkReviewer(o){
 /* ---------- Tienda ---------- */
 function openShop(o){
   const items=SHOP.map(it=>{
-    const owned=state.gear[it.key];
+    let status='';
+    if(it.type==='gear'){
+      const owned=state.gear[it.key];
+      status=owned?'<span class="owned">✔ Comprado</span>':
+        `<div class="price">💎 ${it.price}</div>
+         <button class="btn gold" ${state.gems<it.price?'disabled':''} onclick="buyFlow('${it.key}')">Comprar</button>`;
+    }else if(it.type==='consumable'){
+      status=`<div class="price">💎 ${it.price}</div>
+       <button class="btn gold" ${state.gems<it.price?'disabled':''} onclick="buyConsumable('${it.key}')">Comprar</button>`;
+    }
     return `<div class="shop-item">
       <span class="si-ico">${it.ico}</span>
       <div><div class="si-name">${it.name}</div><div class="si-desc">${it.desc}</div></div>
-      <div class="si-buy">${owned?'<span class="owned">✔ Comprado</span>':
-        `<div class="price">💎 ${it.price}</div>
-         <button class="btn gold" ${state.gems<it.price?'disabled':''} onclick="buyFlow('${it.key}')">Comprar</button>`}</div>
+      <div class="si-buy">${status}</div>
     </div>`;}).join('');
   openPanel(`<h2>🏪 ${o.name}</h2>
     <div class="speaker"><div class="face">🧔</div>
@@ -1111,6 +1123,33 @@ function buyFlow(key){
       recordAnswer(false);
       fb.className='feedback bad'; fb.textContent=`La respuesta era “${w.es}”. Inténtalo de nuevo, sin prisa.`;
       addAction(`<button class="btn" onclick="buyFlow('${key}')">Reintentar</button>`);
+    }
+  }));
+}
+function buyConsumable(key){
+  const item=SHOP.find(s=>s.key===key);
+  if(Object.keys(state.learned).length===0){ toast('Aprende una palabra primero',true); return; }
+  const id=anyLearnedId();
+  const w=byId(id), opts=buildChoices(w.es);
+  openPanel(`<h2>🤝 Demuestra para pagar</h2>
+    <div class="speaker"><div class="face">🧔</div>
+    <div class="bubble">Para llevarte el <b>${item.name}</b>, dime: ¿qué significa esta palabra?</div></div>
+    <div class="wordbig">${w.en}</div>
+    <div class="choices">${opts.map(op=>`<button class="choice" data-v="${op}">${op}</button>`).join('')}</div>
+    <div class="feedback" id="fb"></div>`);
+  panel.querySelectorAll('.choice').forEach(btn=>btn.addEventListener('click',()=>{
+    const right=btn.dataset.v===w.es;
+    panel.querySelectorAll('.choice').forEach(b=>{b.disabled=true;
+      if(b.dataset.v===w.es)b.classList.add('correct'); else if(b===btn)b.classList.add('wrong');});
+    const fb=document.getElementById('fb');
+    if(right){
+      state.gems-=item.price; state.inventory[key]++; recordAnswer(true); updateHUD(); saveState();
+      fb.className='feedback good'; fb.textContent=`¡Trato hecho! Compraste ${item.name}.`;
+      addAction(`<button class="btn" onclick="openShop(OBJECTS.find(o=>o.id==='shop'))">Seguir comprando</button>`);
+    }else{
+      recordAnswer(false);
+      fb.className='feedback bad'; fb.textContent=`La respuesta era "${w.es}". Inténtalo de nuevo, sin prisa.`;
+      addAction(`<button class="btn" onclick="buyConsumable('${key}')">Reintentar</button>`);
     }
   }));
 }
