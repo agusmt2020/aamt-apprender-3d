@@ -431,7 +431,8 @@ const SHOP=[
   {key:'pants',  ico:'👖', name:'Pantalones',desc:'Reduce el daño (-3)', price:7, type:'gear'},
   {key:'shield', ico:'🛡️', name:'Escudo',    desc:'Bloquea bastante daño (-5)', price:9, type:'gear'},
   {key:'boots',  ico:'🥾', name:'Botas',     desc:'Reduce un poco el daño (-2)', price:5, type:'gear'},
-  {key:'water',  ico:'💧', name:'Agua',      desc:'Regenera la barra de Jet', price:5, type:'consumable'}
+  {key:'water',  ico:'💧', name:'Agua',      desc:'Regenera la barra de Jet', price:5, type:'consumable'},
+  {key:'potion', ico:'🩹', name:'Poción de Vida', desc:'Recupera 50 puntos de vida', price:7, type:'consumable'}
 ];
 
 /* ----------------------------------------------------------------------
@@ -469,7 +470,7 @@ const defaultState = ()=>({
   hp:100, maxHp:100, hunger:100, maxHunger:100, jet:100, maxJet:100, gems:0,
   learned:{},
   gear:{sword:false, chest:false, helmet:false, pants:false, shield:false, boots:false},
-  inventory:{water:0},
+  inventory:{water:0, potion:0},
   islandIndex:0,
   px:ISLANDS[0].spawn.x, py:ISLANDS[0].spawn.y,
   yaw:0,
