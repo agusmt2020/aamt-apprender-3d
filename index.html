@@ -268,6 +268,7 @@
     <span class="title pixel">APPRENDER JUGANDO</span>
     <span class="stat" title="Vida"><span class="ico">❤️</span><span class="hpbar"><i id="hpFill" style="width:100%"></i></span></span>
     <span class="stat" title="Hambre"><span class="ico">🍖</span><span class="hpbar"><i id="hungerFill" style="width:100%"></i></span></span>
+    <span class="stat" title="Cansancio"><span class="ico">😴</span><span class="hpbar"><i id="staminaFill" style="width:100%"></i></span></span>
     <span class="stat" title="Gemas"><span class="ico">💎</span><span id="gemCount">0</span></span>
     <span class="stat" title="Palabras aprendidas"><span class="ico">📖</span><span id="wordCount">0</span></span>
     <span class="stat clickable" id="medalStat" title="Logros desbloqueados"><span class="ico">🏅</span><span id="medalCount">0/0</span></span>
@@ -295,6 +296,8 @@
     </div>
     <div class="ctrl-right">
       <button class="btn gold" id="actionBtn" disabled>Acércate a alguien</button>
+      <button class="btn ghost" id="sleepBtn">🛏️ Dormir</button>
+      <button class="btn ghost" id="inventoryBtn">🧱 Bloques</button>
       <button class="btn ghost" id="bankBtn">📖 Mis palabras</button>
       <button class="btn ghost" id="profileBtn">👤 Perfil</button>
       <button class="btn ghost" id="helpBtn">❓ Ayuda</button>
@@ -463,7 +466,10 @@ const MEDALS=[
 const SAVE_KEY='aprender-jugando-save-v1';
 const defaultState = ()=>({
   name:'Aventurero/a',
-  hp:100, maxHp:100, hunger:100, maxHunger:100, gems:0,
+  hp:100, maxHp:100, hunger:100, maxHunger:100, stamina:100, maxStamina:100, gems:0,
+  woodBlocks:64,
+  blockGrid:{},
+  inNight:false,
   learned:{},
   gear:{sword:false, chest:false, helmet:false, pants:false, shield:false, boots:false},
   islandIndex:0,
@@ -475,7 +481,8 @@ const defaultState = ()=>({
   actionsSinceRust:0,
   medals:{},
   stats:{correctStreak:0, bestStreak:0, totalCorrect:0, zonesCleared:0},
-  lastHungerTime:Date.now()
+  lastHungerTime:Date.now(),
+  lastStaminaTime:Date.now()
 });
 let state = loadState() || defaultState();
 
@@ -590,6 +597,88 @@ function setSpriteFace(sprite, ch){
   sprite.material.needsUpdate=true;
 }
 
+/* ---------- Bloques de construcción ---------- */
+let blockGroup=null;
+let blockMeshes={};
+const WOOD_BLOCK_KEY='wood-block';
+let raycaster=null;
+
+function initBlockSystem(){
+  if(!blockGroup){
+    blockGroup=new THREE.Group();
+    scene.add(blockGroup);
+  }
+  if(!raycaster) raycaster=new THREE.Raycaster();
+  rebuildBlocks();
+}
+
+function rebuildBlocks(){
+  if(!blockGroup) return;
+  blockGroup.clear();
+  blockMeshes={};
+  const woodMat=new THREE.MeshLambertMaterial({color:cssColor('--wood')});
+  const cube=new THREE.BoxGeometry(1,1,1);
+  for(const key in state.blockGrid){
+    const [x,y]=key.split(',').map(Number);
+    const m=new THREE.Mesh(cube,woodMat);
+    m.position.set(x,y,0); // dummy z
+    blockGroup.add(m);
+    blockMeshes[key]=m;
+  }
+}
+
+function placeBlock(wx,wy){
+  if(state.woodBlocks<=0){ toast('Sin bloques de madera','warn'); return; }
+  const key=wx+','+wy;
+  if(state.blockGrid[key]){ toast('Ya hay un bloque aquí','warn'); return; }
+  state.blockGrid[key]=true;
+  state.woodBlocks--;
+  rebuildBlocks();
+  updateHUD();
+  saveState();
+  toast('🧱 Bloque colocado!');
+}
+
+function breakBlock(wx,wy){
+  const key=wx+','+wy;
+  if(!state.blockGrid[key]){ return; }
+  delete state.blockGrid[key];
+  state.woodBlocks=Math.min(64,state.woodBlocks+1);
+  rebuildBlocks();
+  updateHUD();
+  saveState();
+  toast('💥 Bloque roto!');
+}
+
+function getRaycastTarget(){
+  const d=dirVector();
+  // busca el bloque más cercano a donde miras (hasta 4 bloques de distancia)
+  for(let dist=1;dist<=4;dist++){
+    const px=Math.round(pcx+d.x*dist);
+    const py=Math.round(pcz+d.z*dist);
+    // verifica si el bloque está dentro del mapa válido
+    if(walkable(px,py)||MAP[py]&&MAP[py][px]){
+      return {x:px,y:py,dist};
+    }
+  }
+  return null;
+}
+
+function setupBlockControls(){
+  const el=renderer.domElement;
+  el.addEventListener('click',e=>{
+    if(overlay.classList.contains('show')) return;
+    const t=getRaycastTarget();
+    if(t) placeBlock(t.x,t.y);
+  });
+  el.addEventListener('contextmenu',e=>{
+    e.preventDefault();
+    if(overlay.classList.contains('show')) return;
+    const t=getRaycastTarget();
+    if(t) breakBlock(t.x,t.y);
+  });
+}
+
 function setupThree(){
   renderer=new THREE.WebGLRenderer({antialias:true});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
@@ -613,6 +702,8 @@ function setupThree(){
   scene.add(ringMesh);
 
   initLookControls();
+  initBlockSystem();
+  setupBlockControls();
   onResize();
   window.addEventListener('resize',onResize);
   animate();
@@ -680,6 +771,8 @@ function buildWorld(){
   yaw = state.yaw||0; pitch=0;
   nearestId=null;
   updateCamera();
+
+  initBlockSystem();
 }
 
 /* arbolito/arbusto decorativo simple */
@@ -812,6 +905,20 @@ function animate(){
       state.lastHungerTime=now;
       updateHUD();
     }
+    // decremento de cansancio cada 4 segundos
+    if(now-state.lastStaminaTime>4000){
+      state.stamina=Math.max(0,state.stamina-1);
+      state.lastStaminaTime=now;
+      updateHUD();
+      // si cansancio muy bajo, es noche
+      if(state.stamina<20 && !state.inNight){
+        state.inNight=true;
+        enterNight();
+      }else if(state.stamina>=40 && state.inNight){
+        state.inNight=false;
+        exitNight();
+      }
+    }
 
     // objeto interactuable más cercano
     updateNearest();
@@ -873,6 +980,7 @@ function labelFor(o){
 function updateHUD(){
   document.getElementById('hpFill').style.width=Math.max(0,state.hp/state.maxHp*100)+'%';
   document.getElementById('hungerFill').style.width=Math.max(0,state.hunger/state.maxHunger*100)+'%';
+  document.getElementById('staminaFill').style.width=Math.max(0,state.stamina/state.maxStamina*100)+'%';
   document.getElementById('gemCount').textContent=state.gems;
   document.getElementById('wordCount').textContent=Object.keys(state.learned).length;
   const got=MEDALS.filter(m=>state.medals[m.id]).length;
@@ -1431,6 +1539,8 @@ document.getElementById('bankBtn').addEventListener('click',openBank);
 document.getElementById('medalStat').addEventListener('click',openMedals);
 document.getElementById('helpBtn').addEventListener('click',showHelp);
 document.getElementById('profileBtn').addEventListener('click',openProfile);
+document.getElementById('sleepBtn').addEventListener('click',openSleep);
+document.getElementById('inventoryBtn').addEventListener('click',openInventory);
 
 /* ---------- Perfil del jugador ---------- */
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -1516,6 +1626,60 @@ function confirmReset(){
     <div class="panel-actions">
       <button class="btn ghost" onclick="openBank()">Cancelar</button>
       <button class="btn danger" onclick="resetGame()">Sí, reiniciar</button></div>`);
+}
+
+/* ---------- Dormir y Cansancio ---------- */
+function openSleep(){
+  if(state.stamina>=95){
+    toast('Ya estás bien descansado/a','warn');
+    return;
+  }
+  openPanel(`<h2>🛏️ Descansar</h2>
+    <div class="speaker"><div class="face">😴</div>
+    <div class="bubble">Duerme un poco para recuperar energía. Tu cansancio subirá completamente.</div></div>
+    <div class="panel-actions">
+      <button class="btn ghost" onclick="closePanel()">Cancelar</button>
+      <button class="btn gold" onclick="doSleep()">Dormir</button></div>`);
+}
+function doSleep(){
+  state.stamina=state.maxStamina;
+  state.inNight=false;
+  exitNight();
+  updateHUD();
+  saveState();
+  closePanel();
+  toast('✨ Descansado/a. ¡A explorar!');
+}
+function enterNight(){
+  if(scene){
+    scene.background=new THREE.Color(0x001a33);
+    if(scene.fog) scene.fog.color.setHex(0x001a33);
+  }
+  toast('🌙 La noche cae... es hora de dormir','warn');
+}
+function exitNight(){
+  if(scene){
+    const isFoggy=island().id==='niebla';
+    const bgColor=isFoggy?0x2d5aa4:0x3b7dc9;
+    scene.background=new THREE.Color(bgColor);
+    if(scene.fog) scene.fog.color.setHex(bgColor);
+  }
+  toast('☀️ ¡Una nueva mañana!');
+}
+
+/* ---------- Inventario de Bloques ---------- */
+function openInventory(){
+  openPanel(`<h2>🧱 Inventario de Bloques</h2>
+    <div class="speaker"><div class="face">🧱</div>
+    <div class="bubble">Tienes <b>${state.woodBlocks} bloques de madera</b>. Mira hacia un lugar y usa <b>clic derecho</b> para colocar, <b>clic izquierdo</b> para romper.</div></div>
+    <div style="background:var(--minecraft-planks);padding:12px;border-radius:0;margin:8px 0;border:4px solid var(--minecraft-wood)">
+      <div style="font-size:14px;font-weight:800;color:var(--minecraft-dark);text-align:center">🪵 ${state.woodBlocks} / 64</div>
+      <div style="width:100%;height:20px;background:var(--minecraft-dark);margin-top:8px;border:2px solid var(--minecraft-dark);overflow:hidden">
+        <div style="width:${Math.min(100,state.woodBlocks/64*100)}%;height:100%;background:var(--minecraft-emerald);transition:width .3s"></div>
+      </div>
+    </div>
+    <div class="panel-actions">
+      <button class="btn ghost" onclick="closePanel()">Cerrar</button></div>`);
 }
 
 /* ---------- Teclado / pad ---------- */
