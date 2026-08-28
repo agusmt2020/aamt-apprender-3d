@@ -413,6 +413,50 @@ const ISLANDS = [
       {id:'boss',     kind:'boss',     face:'🐲', x:10, y:1, name:'Dragón del Bosque', face2:'🏳️',
        greeting:'¡Solo el conocimiento me hiere! Trae tu espada y muchas palabras si quieres pasar.'}
     ]
+  },
+  {
+    id:'numeros',
+    name:'Isla de los Números',
+    theme:'Matemáticas · operaciones básicas',
+    floor:'G',
+    vocab:[
+      {id:'math_add', en:'2 + 3', es:'5', hint:'Suma cinco cuando juntas dos y tres.'},
+      {id:'math_subtract', en:'9 - 4', es:'5', hint:'Después de quitar cuatro a nueve quedan cinco.'},
+      {id:'math_multiply', en:'3 × 4', es:'12', hint:'Tres grupos de cuatro forman doce.'},
+      {id:'math_divide', en:'20 ÷ 5', es:'4', hint:'Reparte veinte en cinco grupos iguales.'},
+      {id:'math_square', en:'5 × 5', es:'25', hint:'Cinco por cinco es el cuadrado de cinco.'},
+      {id:'math_half', en:'La mitad de 18', es:'9', hint:'Divide dieciocho en dos partes iguales.'},
+      {id:'math_triangle', en:'Lados de un triángulo', es:'3', hint:'Cuenta los lados de esta figura geométrica.'},
+      {id:'math_ten', en:'10 + 7', es:'17', hint:'Suma diez y siete para obtener el resultado.'}
+    ],
+    map:[
+      "WWWWWWWWWWWWWWWWWWWWW",
+      "WGGGGGGGGGGGGGGGGGGGGW",
+      "WGGGGPPPGGGGGGGGGGGGW",
+      "WGGGGPGGGGGGGGGGGGGGW",
+      "WGGPPPGGGGGGGGGGGGGGW",
+      "WGGPGGGGGGGGGGGGGGGGW",
+      "WGGPPPGGGGGGPPPGGGGGW",
+      "WGGGGGPGGGGGPGGGGGGW",
+      "WGGGGGGGGGGGPPPGGGGGW",
+      "WGGGGGGGGGGGGPGGGGGW",
+      "WGGGGGGGGGGGGGGGGGGGW",
+      "WGGGGGGGGGGGGGGGGGGGW",
+      "WGGGGGGGGGGGGGGGGGGGW",
+      "WWWWWWWWWWWWWWWWWWWWW"
+    ],
+    spawn:{x:5,y:7},
+    objects:[
+      {id:'teacherE', kind:'teacher', face:'🧙', x:8, y:3, name:'Maestro Suma',
+       words:['math_add','math_subtract','math_multiply','math_divide']},
+      {id:'teacherF', kind:'teacher', face:'👩‍🔬', x:15, y:9, name:'Científica Ada',
+       words:['math_square','math_half','math_triangle','math_ten']},
+      {id:'reviewer', kind:'reviewer', face:'🦊', x:3, y:11, name:'Zorro Pi'},
+      {id:'shop',     kind:'shop',     face:'🏛️', x:3, y:3, name:'Tienda del Cálculo'},
+      {id:'enemies',  kind:'enemies',  face:'🐐', x:14, y:4, name:'Rebaño de cabras'},
+      {id:'boss',     kind:'boss',     face:'🗿', x:10, y:1, name:'Gólem Geométrico', face2:'🏳️',
+       greeting:'¡Para cruzar la isla debes resolver mis desafíos! Usa tu espada y demuestra cuánto sabes de matemáticas.'}
+    ]
   }
   /* >>> Para añadir un nuevo módulo, copia un objeto isla aquí. Ver README. <<< */
 ];
@@ -482,7 +526,8 @@ function loadState(){
     const saved=JSON.parse(r);
     const base=defaultState();
     return {...base, ...saved, gear:{...base.gear, ...(saved.gear||{})},
-      stats:{...base.stats, ...(saved.stats||{})}, medals:saved.medals||{}};
+      stats:{...base.stats, ...(saved.stats||{})}, medals:saved.medals||{},
+      lastHungerTime:saved.lastHungerTime||Date.now()};
   }catch(e){ return null; }
 }
 function resetGame(){ state = defaultState(); saveState(); buildWorld(); updateHUD(); refreshActionBtn(); closePanel(); toast('Progreso reiniciado'); }
